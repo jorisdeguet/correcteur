@@ -65,7 +65,9 @@ class Copie:
     source: Path                 # clone git, archive ou dossier d'origine
     nature: str                  # "git", "archive" ou "dossier"
     dossier: Path | None = None  # copie de travail extraite (None si pas de commit avant l'échéance)
-    cle: str = ""                # SHA du commit, empreinte de l'archive ou du dossier
+    cle: str = ""                # SHA du commit, empreinte de l'archive ou du dossier (clé de cache)
+    sha: str | None = None       # commit corrigé (dépôts git)
+    locale: bool = False         # copie du dossier de travail plutôt que du commit
     echeance: datetime | None = None
     reference: str | None = None
     commits_apres: list = field(default_factory=list)
@@ -83,7 +85,7 @@ class Copie:
         """Commits jusqu'au commit corrigé (None si la copie n'est pas un dépôt git)."""
         if self.nature != "git":
             return None
-        return git_info.historique(self.source, jusqua=self.cle or None, maximum=maximum)
+        return git_info.historique(self.source, jusqua=None if self.locale else self.sha, maximum=maximum)
 
     def fichier(self, nom: str) -> Path | None:
         """Fichier dans la copie de travail (racine d'abord, sinon le moins profond)."""
@@ -123,6 +125,7 @@ class Recette:
         marge: str = "8mm",
         saut: str = "odd",
         preambule: Iterable[str] = (),
+        compact: bool = True,
         legende_notes: str = "",
         note_sur: float = 10,
         dossier_defaut: str | None = None,
@@ -146,6 +149,7 @@ class Recette:
         self.marge = marge
         self.saut = saut
         self.preambule = list(preambule)
+        self.compact = compact
         self.legende_notes = legende_notes
         self.note_sur = note_sur
         self.dossier_defaut = dossier_defaut
@@ -190,6 +194,9 @@ class Recette:
         g.add_argument("--echeance", help="Échéance ISO, ex. 2026-11-04T23:59 (défaut : config.toml).")
         g.add_argument("--sans-echeance", action="store_true", help="Ignore l'échéance : dernier commit.")
         g.add_argument("--reference", help="Référence git corrigée (défaut : origin/HEAD ou HEAD).")
+        g.add_argument("--travail-local", action="store_true",
+                       help="Corrige les fichiers du dossier de travail des clones (modifications non "
+                            "committées comprises) plutôt que le commit à l'échéance.")
         g.add_argument("--seulement", nargs="+", metavar="ID", help="Ne corrige que ces matricules.")
         g.add_argument("--inclure-exclus", action="store_true", help="Corrige aussi les copies exclues.")
         g.add_argument("--etat", type=Path, help="Dossier où créer .correction (défaut : le dossier des copies).")
@@ -258,12 +265,17 @@ class Recette:
         return ctx, copies
 
     def _classe(self, args, config, racine: Path, parser) -> dict[str, Etudiant]:
-        chemin = args.classe or (racine / config["classe"] if config.get("classe") else None) or self.classe_defaut
-        if chemin is None:
+        """Liste de classe : --classe (relatif au dossier courant), sinon config.toml (relatif au
+        dossier des copies), sinon le défaut de la recette."""
+        if args.classe:
+            chemin = Path(args.classe).expanduser().resolve()
+        elif config.get("classe"):
+            chemin = Path(config["classe"]).expanduser()
+            chemin = chemin if chemin.is_absolute() else (racine / chemin).resolve()
+        elif self.classe_defaut:
+            chemin = Path(self.classe_defaut).expanduser().resolve()
+        else:
             return {}
-        chemin = Path(chemin).expanduser()
-        if not chemin.is_absolute():
-            chemin = (racine / chemin).resolve()
         try:
             return lire_classe(chemin)
         except (OSError, ValueError, RuntimeError) as e:
@@ -338,14 +350,22 @@ class Recette:
             if e.id in exclusions:
                 console.info(f"Exclu : {e.nom_affiche} ({e.id}) — {exclusions[e.id]}")
                 continue
-            copies.append(Copie(e, source, nature, echeance=args.echeances.pour(e.id), reference=args.reference))
+            copies.append(Copie(e, source, nature, echeance=args.echeances.pour(e.id), reference=args.reference,
+                                locale=bool(args.travail_local) and nature == "git"))
         copies.sort(key=lambda c: (c.groupe, c.etudiant.cle_tri))
 
         # Extraction des copies de travail (en parallèle : git archive / unzip sont indépendants).
         def extraire(copie: Copie) -> Copie:
             destination = travail / _nom_sur(copie.id)
             try:
-                if copie.nature == "git":
+                if copie.locale:
+                    copie.cle = "local-" + depots.empreinte_dossier(copie.source)
+                    temoin = destination / ".correction-dossier"
+                    if not (temoin.is_file() and temoin.read_text().strip() == copie.cle):
+                        depots.copier_dossier(copie.source, destination)
+                        temoin.write_text(copie.cle + "\n")
+                    copie.dossier = destination
+                elif copie.nature == "git":
                     ref = copie.reference or echeance.reference_par_defaut(copie.source)
                     copie.reference = ref
                     sha = echeance.commit_a_echeance(copie.source, copie.echeance, ref)
@@ -353,7 +373,7 @@ class Recette:
                         copie.remarques.append("aucun commit avant l'échéance" if copie.echeance else "dépôt vide")
                         copie.cle = "aucun-commit"
                         return copie
-                    copie.cle = sha
+                    copie.cle = copie.sha = sha
                     copie.commits_apres = echeance.commits_apres(copie.source, sha, ref) if copie.echeance else []
                     copie.dossier = depots.exporter_commit(copie.source, sha, destination)
                 elif copie.nature == "archive":
@@ -470,7 +490,8 @@ class Recette:
                 continue
             contenu = typst.document(
                 fiches, genere_par=f"{self.nom} v{self.version} ({datetime.now():%Y-%m-%d %H:%M}) — {machine}",
-                taille=args.font_size, marge=self.marge, saut=self.saut, preambule=self.preambule)
+                taille=args.font_size, marge=self.marge, saut=self.saut, preambule=self.preambule,
+                compact=self.compact)
             try:
                 pdf = typst.ecrire_et_compiler(contenu, sortie / f"groupe-{groupe}.typ", racine=sortie)
                 produits.append(pdf)

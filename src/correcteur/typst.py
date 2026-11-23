@@ -99,11 +99,13 @@ def document(
     saut: str = "odd",
     preambule: Iterable[str] = (),
     entete: str = "",
+    compact: bool = True,
 ) -> str:
     """Assemble les fiches d'un groupe.
 
     ``saut="odd"`` : chaque fiche commence sur une page impaire (impression recto verso,
     une feuille par étudiant) ; ``saut="page"`` : simple saut de page.
+    ``compact=False`` retire les réglages d'espacement (paragraphes, titres, fond des blocs de code).
     """
     if not TAILLE_RE.fullmatch(taille):
         raise ValueError(f"Taille Typst invalide : {taille!r} (ex. 8pt)")
@@ -112,9 +114,11 @@ def document(
         f'#set page(paper: "us-letter", margin: {marge}, flipped: {"true" if paysage else "false"})',
         f'#set text(font: "Libertinus Serif", size: {taille}, lang: "fr")',
         "#set heading(numbering: none)",
-        "#set par(spacing: 5pt)",
-        "#show heading: set block(above: 6pt, below: 4pt)",
-        "#show raw.where(block: true): set block(fill: luma(245), inset: 2pt, width: 100%)",
+        *([
+            "#set par(spacing: 5pt)",
+            "#show heading: set block(above: 6pt, below: 4pt)",
+            "#show raw.where(block: true): set block(fill: luma(245), inset: 2pt, width: 100%)",
+        ] if compact else []),
         CASE_A_COCHER,
         FIT_COLUMN,
         *preambule,
@@ -187,3 +191,16 @@ def compiler_gabarit(gabarit: Path | str, donnees: Any, sortie: Path, nom_donnee
 def nombre_pages(pdf: Path) -> int:
     """Nombre de pages d'un PDF (approximation par comptage des objets /Page)."""
     return len(re.findall(rb"/Type\s*/Page(?!s)", Path(pdf).read_bytes()))
+
+
+def liste_commits(commits, maximum: int | None = 25, compte: bool = True) -> str:
+    """Liste compacte « - (04/11 23:12) message » à partir de :func:`correcteur.git_info.historique`."""
+    if commits is None:
+        return "#text(fill: red)[Aucun dépôt Git trouvé.]"
+    if not commits:
+        return "#text(fill: red)[Aucun commit trouvé.]"
+    affiches = commits if maximum is None else commits[:maximum]
+    lignes = [f"- ({c.date_courte}) {texte(c.titre)}" for c in affiches]
+    if len(commits) > len(affiches):
+        lignes.append(f"- … {len(commits) - len(affiches)} commits plus anciens")
+    return (f"*{len(commits)} commit(s)*\n" if compte else "") + "\n".join(lignes)

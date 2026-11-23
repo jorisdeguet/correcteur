@@ -18,8 +18,8 @@ for _flux in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-console = Console(highlight=False)
-erreurs = Console(stderr=True, highlight=False)
+console = Console(highlight=False, soft_wrap=True)
+erreurs = Console(stderr=True, highlight=False, soft_wrap=True)
 _verrou = threading.Lock()
 
 

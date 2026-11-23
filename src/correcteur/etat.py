@@ -62,7 +62,7 @@ class Etat:
     def __init__(self, racine: Path):
         self.racine = Path(racine).resolve()
         self.dossier = self.racine / NOM_DOSSIER
-        self.dossier.mkdir(exist_ok=True)
+        self.dossier.mkdir(parents=True, exist_ok=True)
         if not (self.dossier / ".gitignore").exists():
             (self.dossier / ".gitignore").write_text("*\n")
         self.chemin_config = self.dossier / "config.toml"

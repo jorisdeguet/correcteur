@@ -175,3 +175,24 @@ def substituer_globale(source: str, nom: str, valeur_python: str) -> str | None:
             debut, fin = noeud.lineno - 1, noeud.end_lineno
             return "".join(lignes[:debut]) + f"{nom} = {valeur_python}\n" + "".join(lignes[fin:])
     return None
+
+
+def environnement_uv(dossier: Path, paquets: Iterable[str], python: str = "3.13") -> str | None:
+    """Crée au besoin (avec uv) un venv pour exécuter le code étudiant ; retourne son interpréteur.
+
+    Reproductible sur toutes les machines : ``environnement_uv(etat.dossier / "python", ["pandas", "matplotlib"])``.
+    """
+    from .execution import executer
+    py = python_du_venv(Path(dossier))
+    temoin = Path(dossier) / ".paquets"
+    voulu = " ".join(sorted(paquets)) + f" python={python}"
+    if py.exists() and temoin.is_file() and temoin.read_text() == voulu:
+        return str(py)
+    r = executer(["uv", "venv", "--allow-existing", "--python", python, str(dossier)], delai=600)
+    if not r.reussi:
+        return None
+    r = executer(["uv", "pip", "install", "--python", str(py), *paquets], delai=900)
+    if not r.reussi:
+        return None
+    temoin.write_text(voulu)
+    return str(py)

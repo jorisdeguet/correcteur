@@ -35,6 +35,8 @@ def principal(argv: list[str]) -> int:
         p.add_argument("-w", type=int, default=8, help="Fenêtre du winnowing (défaut 8).")
         p.add_argument("--frequence-max", type=float, default=0.5,
                        help="Ignore les fragments présents dans plus de cette fraction des copies.")
+        p.add_argument("--gros-commits", type=int, default=100, metavar="LIGNES",
+                       help="Signale les commits d'au moins LIGNES lignes modifiées (0 : désactivé ; défaut 100).")
         p.add_argument("--sans-navigateur", action="store_true", help="N'ouvre pas le rapport.")
 
     ctx, copies = r.session(argv)
@@ -51,6 +53,14 @@ def principal(argv: list[str]) -> int:
         noms[c.id] = f"{c.etudiant.nom_affiche} ({c.id}, gr. {c.groupe})"
     paires = analyse.paires(seuil=a.seuil)
     remarques = [f"Échéance : {a.echeances.echeance:%Y-%m-%d %H:%M}"] if a.echeances.echeance else []
+    if a.gros_commits:
+        from ..git_info import gros_commits
+        for c in copies:
+            if c.nature != "git":
+                continue
+            for commit, lignes in gros_commits(c.source, c.sha, a.gros_commits, tuple(a.motifs)):
+                remarques.append(f"Gros commit : {c.etudiant.nom_affiche} ({c.id}) — {commit.date_courte} — "
+                                 f"{lignes} lignes — « {commit.titre[:60]} »")
     vides = [c.etudiant.nom_affiche for c in copies if c.dossier is None]
     if vides:
         remarques.append("Sans copie : " + ", ".join(vides))

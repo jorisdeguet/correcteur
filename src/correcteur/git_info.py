@@ -70,3 +70,40 @@ def lignes_modifiees(depot: Path, sha: str) -> int:
         if a.isdigit() and s.isdigit():
             total += int(a) + int(s)
     return total
+
+
+def gros_commits(depot: Path, jusqua: str | None = None, seuil: int = 100,
+                 motifs: tuple[str, ...] = ("*",)) -> list[tuple[Commit, int]]:
+    """Commits qui ajoutent ou retirent au moins ``seuil`` lignes des fichiers ``motifs``
+    (un seul appel git ; le commit initial, qui contient le code de départ, est ignoré)."""
+    import fnmatch
+    if not (depot / ".git").exists():
+        return []
+    commande = ["git", "-C", str(depot), "log", "--numstat", "--format=\x1e%H\x1f%aI\x1f%an\x1f%s\x1f%P"]
+    if jusqua:
+        commande.append(jusqua)
+    try:
+        proc = subprocess.run(commande, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    trouves = []
+    for bloc in proc.stdout.split("\x1e")[1:]:
+        entete, _, stats = bloc.partition("\n")
+        parties = entete.split("\x1f")
+        if len(parties) < 5 or not parties[4].strip():
+            continue  # commit racine
+        total = 0
+        for ligne in stats.splitlines():
+            a, _, reste = ligne.partition("\t")
+            s, _, fichier = reste.partition("\t")
+            nom = fichier.rsplit("/", 1)[-1]
+            if a.isdigit() and s.isdigit() and any(fnmatch.fnmatch(nom, m) or fnmatch.fnmatch(fichier, m)
+                                                   for m in motifs):
+                total += int(a) + int(s)
+        if total >= seuil:
+            try:
+                date = datetime.fromisoformat(parties[1])
+            except ValueError:
+                date = None
+            trouves.append((Commit(parties[0], date, parties[2], parties[3]), total))
+    return trouves
