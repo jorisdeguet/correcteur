@@ -9,7 +9,7 @@ Voir README.md. Points d'entrée principaux :
 - la commande ``corr`` (doctor, sync, statut, exclure, plagiat, ouvrir…).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .classe import Etudiant, lire_classe  # noqa: E402
 from .execution import Resultat, executer, executer_python  # noqa: E402

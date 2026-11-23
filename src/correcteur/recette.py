@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import re
 import sys
 import time
 import traceback
@@ -55,6 +56,7 @@ class Fiche:
     typst: str
     note: dict | None = None
     donnees: Any = None
+    conserver: bool = True  # False : ne pas mettre en cache (ex. build en échec, peut-être passager)
 
 
 @dataclass
@@ -246,7 +248,7 @@ class Recette:
 
         classe = self._classe(args, config, racine, parser)
         groupes = list(dict.fromkeys(args.groupes or config.get("groupes", [])))
-        if classe and groupes:
+        if classe and groupes and not self.archives_par_groupe:  # sinon le dossier fait foi
             inconnus = sorted(set(groupes) - {e.groupe for e in classe.values()})
             if inconnus:
                 parser.error(f"Groupe(s) absent(s) de la liste de classe : {', '.join(inconnus)}.")
@@ -420,12 +422,14 @@ class Recette:
         a_faire = []
         for copie in copies:
             entree = etat.lire(self.nom, copie.id, copie.cle, self.version, options)
-            if entree is not None:
+            if entree is not None and not images_manquantes(entree.fiche, ctx.sortie):
                 resultats[copie.id] = entree
             else:
                 a_faire.append(copie)
         if resultats:
             console.info(f"{len(resultats)} copie(s) déjà corrigée(s) (cache), {len(a_faire)} à corriger.")
+
+        sans_cache: set[str] = set()
 
         def une(copie: Copie) -> Entree:
             debut = time.perf_counter()
@@ -436,6 +440,8 @@ class Recette:
                 try:
                     fiche = _en_fiche(self._corriger(copie, ctx))
                     statut = "ok"
+                    if not fiche.conserver:
+                        sans_cache.add(copie.id)
                 except Exception as err:
                     trace = traceback.format_exc(limit=-4)
                     fiche = Fiche(f"{typst.rouge(f'{copie.etudiant.nom_affiche} ({copie.id}) : erreur de correction : {err}')}"
@@ -452,7 +458,7 @@ class Recette:
                 copie = futurs[futur]
                 entree = futur.result()
                 resultats[copie.id] = entree
-                if entree.statut != "erreur":  # les erreurs sont retentées au prochain lancement
+                if entree.statut != "erreur" and copie.id not in sans_cache:  # les erreurs sont retentées au prochain lancement
                     etat.ecrire(self.nom, copie.id, copie.cle, self.version, options, entree)
                 marque = {"ok": "", "vide": " — aucune copie", "erreur": " — ERREUR"}[entree.statut]
                 (console.erreur if entree.statut == "erreur" else console.info)(
@@ -541,6 +547,11 @@ class Recette:
             console.erreur(f"{len(erreurs)} copie(s) en erreur : {', '.join(erreurs)}")
             raise SystemExit(1)
         console.ok(f"Terminé. Sorties dans {ctx.sortie}")
+
+
+def images_manquantes(fiche: str, sortie: Path) -> bool:
+    """Vrai si une fiche du cache cite une image absente de la sortie (autre --out, dossier vidé)."""
+    return any(not (sortie / m).is_file() for m in re.findall(r'image\("([^"\\]+)"', fiche))
 
 
 def _en_fiche(valeur) -> Fiche:

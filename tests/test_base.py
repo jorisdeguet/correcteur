@@ -42,7 +42,7 @@ def test_executer_delai_tue_le_groupe(tmp_path):
     script = tmp_path / "boucle.py"
     script.write_text("import subprocess, sys, time\n"
                       "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
-                      "print('début', flush=True)\nwhile True: time.sleep(1)\n")
+                      "print('début', flush=True)\nwhile True: time.sleep(1)\n", encoding="utf-8")
     r = execution.executer_python(script.name, cwd=tmp_path, delai=2)
     assert r.delai_depasse and not r.reussi
     assert "début" in r.stdout

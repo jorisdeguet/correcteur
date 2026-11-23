@@ -29,7 +29,7 @@ def version(python: str, modules: Iterable[str] = ()) -> str:
     code = "import sys; print(sys.version.split()[0])\n" + "".join(
         f"import {m}; print(getattr({m}, '__version__', '?'))\n" for m in mods)
     try:
-        proc = subprocess.run([python, "-c", code], capture_output=True, text=True, timeout=60)
+        proc = subprocess.run([python, "-c", code], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     except (OSError, subprocess.TimeoutExpired):
         return ""
     if proc.returncode:

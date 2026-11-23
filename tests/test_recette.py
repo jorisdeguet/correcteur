@@ -61,3 +61,26 @@ def test_bout_en_bout(tmp_path, depot, classe_csv):
     Etat(tmp_path).exclure("1234567", "test")
     recette_test(appels).main(argv + ["--refaire"])
     assert appels == ["7654321"]
+
+
+def test_cache_images_et_echecs_non_conserves(tmp_path, depot, classe_csv):
+    depot("TP-1234567-TREMBLAY", [("2026-11-04T20:00:00-05:00", {"solution.py": SOLUTION})])
+    argv = [str(tmp_path), "--classe", str(classe_csv), "--sans-echeance", "--sans-diagnostic"]
+    appels, conserver = [], [True]
+    r = Recette("IMG", version="1", outils=["git"])
+
+    @r.correction
+    def corriger(copie, ctx):
+        appels.append(copie.id)
+        (ctx.sortie / "a.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"/>')
+        return Fiche('#image("a.svg")', conserver=conserver[0])
+
+    r.main(argv)
+    r.main(argv)
+    assert len(appels) == 1
+    r.main(argv + ["--out", str(tmp_path / "ailleurs")])  # image absente de la nouvelle sortie : recorrigé
+    assert len(appels) == 2
+    conserver[0] = False
+    r.main(argv + ["--refaire"])
+    r.main(argv)
+    assert len(appels) == 4

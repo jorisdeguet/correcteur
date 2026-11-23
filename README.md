@@ -21,12 +21,12 @@ Un script de correction déclare la librairie en en-tête ([PEP 723](https://pep
 ```python
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["correcteur @ git+https://github.com/jorisdeguet/correcteur@v0.1.0"]
+# dependencies = ["correcteur @ git+https://github.com/jorisdeguet/correcteur@v0.1.1"]
 # ///
 ```
 
 puis se lance avec `uv run correctionTP2.py …` : uv installe la version épinglée dans un cache,
-sans toucher au Python du système. Une vieille correction épinglée sur `@v0.1.0` continue de
+sans toucher au Python du système. Une vieille correction épinglée sur `@v0.1.1` continue de
 fonctionner quand la librairie évolue.
 
 La commande `corr` (outils communs) :

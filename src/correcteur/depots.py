@@ -235,13 +235,13 @@ def synchroniser(org: str, prefixe: str, racine: Path) -> tuple[list[str], list[
         cible = racine / nom
         if (cible / ".git").exists():
             proc = subprocess.run(["git", "-C", str(cible), "fetch", "--prune", "--quiet", "origin"],
-                                  capture_output=True, text=True, timeout=300)
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
             subprocess.run(["git", "-C", str(cible), "remote", "set-head", "origin", "--auto"],
                            capture_output=True, timeout=60)
             (maj if proc.returncode == 0 else erreurs).append(nom)
         else:
             proc = subprocess.run(["gh", "repo", "clone", f"{org}/{nom}", str(cible), "--", "--quiet"],
-                                  capture_output=True, text=True, timeout=600)
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
             (clones if proc.returncode == 0 else erreurs).append(nom)
         if proc.returncode:
             console.attention(f"{nom} : {(proc.stderr or '').strip()[:200]}")
