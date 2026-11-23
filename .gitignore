@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+dist/
+# Jamais de données étudiantes dans ce dépôt
+.correction/
+*.csv
+*.zip
+*.7z
+*.pdf

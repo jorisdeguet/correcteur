@@ -1,0 +1,31 @@
+[project]
+name = "correcteur"
+version = "0.1.0"
+description = "Primitives pour corriger des travaux de programmation : copies, échéances, exécution bornée, cache, plagiat, rapports Typst."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pydivsufsort>=0.0.23",
+    "py7zr>=0.20",
+    "rich>=13",
+    "tomli-w>=1.0",
+    "typst>=0.13",
+]
+
+[project.scripts]
+corr = "correcteur.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/correcteur"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
